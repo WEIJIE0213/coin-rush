@@ -1,0 +1,29 @@
+{
+  "name": "exam",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
