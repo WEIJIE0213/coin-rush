@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Coin, Phase, Player, RoomState } from '../shared/protocol.js';
 
 export interface Member extends Player { token: string }
-export interface Config { prepareMs: number; countdownMs: number; gameMs: number; coinLifeMs: number; spawnMinMs: number; spawnMaxMs: number }
-export const defaults: Config = { prepareMs: 30_000, countdownMs: 3000, gameMs: 60_000, coinLifeMs: 2800, spawnMinMs: 1000, spawnMaxMs: 2400 };
+export interface Config { prepareMs: number; countdownMs: number; gameMs: number; coinLifeMs: number; spawnMinMs: number; spawnMaxMs: number; hitGraceMs?: number }
+// hitGraceMs: lag compensation. Clients hide a coin at expiresAt (in server time), but a click
+// made just before that moment still needs ~RTT/2 to reach us, so the server keeps the coin
+// claimable for a short extra window. It must stay well below spawnMinMs.
+export const defaults: Config = { prepareMs: 30_000, countdownMs: 3000, gameMs: 60_000, coinLifeMs: 2800, spawnMinMs: 1000, spawnMaxMs: 2400, hitGraceMs: 150 };
 export class GameError extends Error { constructor(public code: string, message: string) { super(message); } }
 export class Room {
   players = new Map<string, Member>();
@@ -37,7 +40,7 @@ export class Room {
     if (this.phase === 'playing') {
       if (now >= this.deadline) { this.phase = 'finished'; this.coin = null; changed = true; }
       else {
-        if (this.coin && now >= this.coin.expiresAt) { this.coin = null; changed = true; }
+        if (this.coin && now >= this.coin.expiresAt + this.grace) { this.coin = null; changed = true; }
         if (!this.coin && now >= this.nextSpawn) {
           this.coin = { id: randomUUID(), cell: Math.floor(Math.random() * 25), spawnedAt: now, expiresAt: Math.min(now + this.config.coinLifeMs, this.deadline) };
           this.nextSpawn = this.coin.expiresAt + this.spawnDelay(); changed = true;
@@ -47,13 +50,14 @@ export class Room {
     if (changed) this.version++;
     return changed;
   }
+  private get grace() { return Math.max(0, Math.min(this.config.hitGraceMs ?? 0, 500)); }
   private spawnDelay() { return this.config.spawnMinMs + Math.random() * (this.config.spawnMaxMs - this.config.spawnMinMs); }
   hit(playerId: string, coinId: string, now = Date.now()) {
     this.tick(now);
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: '玩家已离线' };
     if (this.phase !== 'playing') return { accepted: false, reason: '当前不在对战时间内' };
-    if (!this.coin || this.coin.id !== coinId || now >= this.coin.expiresAt) return { accepted: false, reason: '慢了一步，金币已被抢走或过期' };
+    if (!this.coin || this.coin.id !== coinId || now >= this.coin.expiresAt + this.grace) return { accepted: false, reason: '慢了一步，金币已被抢走或过期' };
     // Single-process in-memory critical section: no await, I/O or callbacks between
     // checking the unique ID, consuming the coin and incrementing the score.
     // Node dispatches message handlers serially; the next handler sees coin === null.
